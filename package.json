@@ -1,5 +1,5 @@
 {
-  "name": "rastreo-app",
+  "name": "rastreador-app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -14,7 +14,10 @@
     "react-dom": "^18"
   },
   "devDependencies": {
+    "autoprefixer": "^10.0.1",
     "eslint": "^8",
-    "eslint-config-next": "13.5.6"
+    "eslint-config-next": "13.5.6",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^3.3.0"
   }
 }
