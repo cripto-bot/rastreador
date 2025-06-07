@@ -1,5 +1,5 @@
 import Head from 'next/head';
-import Link from 'next/link'; // Importante: esta línea es nueva
+import Link from 'next/link';
 
 export default function HomePage() {
   return (
@@ -16,16 +16,20 @@ export default function HomePage() {
             La solución para el monitoreo de tus dispositivos.
           </p>
           
-          {/* --- ESTA ES LA SECCIÓN CORREGIDA --- */}
-          <div className="mt-8">
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
-              href="/register" // Ahora apunta a la página de registro
-              className="px-8 py-4 bg-teal-500 text-white font-bold rounded-lg shadow-lg hover:bg-teal-600 transition-transform transform hover:scale-105"
+              href="/register"
+              className="px-8 py-4 bg-teal-500 text-white font-bold rounded-lg shadow-lg hover:bg-teal-600 transition-transform transform hover:scale-105 w-full sm:w-auto"
             >
-              Comenzar Ahora
+              Crear Cuenta Nueva
+            </Link>
+            <Link
+              href="/login"
+              className="px-8 py-4 bg-gray-700 text-white font-bold rounded-lg shadow-lg hover:bg-gray-600 transition-transform transform hover:scale-105 w-full sm:w-auto"
+            >
+              Iniciar Sesión
             </Link>
           </div>
-          {/* --- FIN DE LA SECCIÓN CORREGIDA --- */}
 
         </div>
       </div>
