@@ -1,9 +1,11 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { useState } from 'react';
+import { useRouter } from 'next/router'; // Importamos el enrutador
 
 export default function LoginPage() {
   const [status, setStatus] = useState('');
+  const router = useRouter(); // Inicializamos el enrutador
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -23,14 +25,22 @@ export default function LoginPage() {
     const result = await response.json();
 
     if (response.ok) {
+      // --- ¡CAMBIOS IMPORTANTES AQUÍ! ---
+      // 1. Guardamos la "llave" (token) en el bolsillo del navegador.
+      localStorage.setItem('token', result.token);
+      
       setStatus('¡Inicio de sesión exitoso! Redirigiendo...');
-      // Más adelante, aquí lo redirigiremos al panel de control.
+      
+      // 2. Redirigimos al usuario al nuevo panel de control.
+      router.push('/dashboard');
     } else {
       setStatus('Error: ' + result.message);
     }
   };
-
+  
+  // El resto del código del formulario es el mismo...
   return (
+    // ... (todo el JSX del formulario se mantiene igual que antes)
     <>
       <Head>
         <title>Iniciar Sesión - CritoBots</title>
