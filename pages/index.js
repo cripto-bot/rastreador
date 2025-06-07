@@ -1,4 +1,5 @@
 import Head from 'next/head';
+import Link from 'next/link'; // Importante: esta línea es nueva
 
 export default function HomePage() {
   return (
@@ -14,14 +15,18 @@ export default function HomePage() {
           <p className="mt-4 text-lg text-gray-300">
             La solución para el monitoreo de tus dispositivos.
           </p>
+          
+          {/* --- ESTA ES LA SECCIÓN CORREGIDA --- */}
           <div className="mt-8">
-            <a
-              href="#" // Más adelante lo cambiaremos por /register
+            <Link
+              href="/register" // Ahora apunta a la página de registro
               className="px-8 py-4 bg-teal-500 text-white font-bold rounded-lg shadow-lg hover:bg-teal-600 transition-transform transform hover:scale-105"
             >
               Comenzar Ahora
-            </a>
+            </Link>
           </div>
+          {/* --- FIN DE LA SECCIÓN CORREGIDA --- */}
+
         </div>
       </div>
     </>
