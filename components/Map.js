@@ -1,8 +1,8 @@
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { useState } from 'react';
 
+// Arreglo para el bug del ícono
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
@@ -10,83 +10,40 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
 });
 
-function AddMarkerOnClick({ onMapClick }) {
-  useMapEvents({
-    click(e) {
-      onMapClick(e.latlng);
-    },
-  });
-  return null;
-}
+export default function Map({ history }) {
+  if (!history || history.length === 0) {
+    // Muestra un mapa centrado si no hay historial
+    return (
+      <MapContainer center={[-25.30066, -57.63591]} zoom={13} style={{ height: '100%', width: '100%' }} className="rounded-lg">
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      </MapContainer>
+    );
+  }
 
-export default function Map({ pois, onNewPoi }) {
-  const position = [-25.30066, -57.63591];
-  const [newMarkerPos, setNewMarkerPos] = useState(null);
-  const [poiName, setPoiName] = useState('');
-
-  const handleMapClick = (latlng) => {
-    setNewMarkerPos(latlng);
-  };
-
-  const handleSavePoi = () => {
-    if (poiName && newMarkerPos) {
-      onNewPoi({ nombre: poiName, lat: newMarkerPos.lat, lng: newMarkerPos.lng });
-      setNewMarkerPos(null);
-      setPoiName('');
-    }
-  };
+  // Extraer todas las posiciones para dibujar la línea
+  const positions = history.map(p => [p.lat, p.lng]);
+  const center = positions[Math.floor(positions.length / 2)]; // Centrar el mapa en medio del recorrido
 
   return (
-    <div className="relative">
-      <MapContainer 
-          center={position} 
-          zoom={13} 
-          style={{ height: '60vh', width: '100%' }}
-          className="rounded-lg shadow-lg"
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        />
-        <AddMarkerOnClick onMapClick={handleMapClick} />
-        
-        {pois.map(poi => (
-          <Marker key={poi.id} position={[poi.lat, poi.lng]}>
-            <Popup>{poi.nombre}</Popup>
-          </Marker>
-        ))}
+    <MapContainer center={center} zoom={14} style={{ height: '100%', width: '100%' }} className="rounded-lg">
+      <TileLayer
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      />
+      
+      {/* Dibuja la línea del recorrido */}
+      <Polyline pathOptions={{ color: 'blue' }} positions={positions} />
 
-        {newMarkerPos && (
-          <Marker position={newMarkerPos}>
-            <Popup>Nuevo Punto de Interés</Popup>
-          </Marker>
-        )}
-      </MapContainer>
+      {/* Marca el punto de inicio */}
+      <Marker position={positions[0]}>
+        <Popup>Inicio del Recorrido - {new Date(history[0].timestamp).toLocaleTimeString('es-PY')}</Popup>
+      </Marker>
 
-      {newMarkerPos && (
-        <div className="absolute top-2 right-2 bg-white p-4 rounded-lg shadow-xl z-[1000] w-64">
-          <h3 className="font-bold text-gray-800 mb-2">Añadir Nuevo Punto</h3>
-          <input 
-            type="text"
-            placeholder="Nombre del cliente o lugar"
-            className="w-full p-2 border rounded text-gray-800"
-            value={poiName}
-            onChange={(e) => setPoiName(e.target.value)}
-          />
-          <button 
-            onClick={handleSavePoi}
-            className="w-full mt-2 bg-teal-500 text-white p-2 rounded hover:bg-teal-600"
-          >
-            Guardar Punto
-          </button>
-          <button 
-            onClick={() => setNewMarkerPos(null)}
-            className="w-full mt-1 bg-gray-300 text-gray-800 p-2 rounded hover:bg-gray-400"
-          >
-            Cancelar
-          </button>
-        </div>
-      )}
-    </div>
+      {/* Marca el punto final */}
+      <Marker position={positions[positions.length - 1]}>
+        <Popup>Última Ubicación - {new Date(history[history.length - 1].timestamp).toLocaleTimeString('es-PY')}</Popup>
+      </Marker>
+
+    </MapContainer>
   );
 }
