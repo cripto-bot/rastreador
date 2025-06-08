@@ -2,28 +2,19 @@ import Head from 'next/head';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
+import jsPDF from 'jspdf'; // Importamos la librería para PDF
 
-const Map = dynamic(
-  () => import('../components/Map'), // La ruta a nuestro componente de mapa
-  { ssr: false }
-);
-
-// --- DATOS DE SIMULACIÓN ---
-// Como aún no tenemos un dispositivo real, simularemos el historial de un día.
-const fakeDeviceHistory = [
-    { lat: -25.2825, lng: -57.633, timestamp: '2023-11-01T08:05:00-03:00' }, // Inicio 8:05 AM PYT
-    { lat: -25.278, lng: -57.62, timestamp: '2023-11-01T08:30:00-03:00' },
-    { lat: -25.292, lng: -57.61, timestamp: '2023-11-01T09:15:00-03:00' }, // Parada
-    { lat: -25.292, lng: -57.61, timestamp: '2023-11-01T09:25:00-03:00' }, // Fin de parada
-    { lat: -25.31, lng: -57.59, timestamp: '2023-11-01T10:00:00-03:00' },
-    { lat: -25.325, lng: -57.575, timestamp: '2023-11-01T10:45:00-03:00' }, // Fin del día
-];
+const Map = dynamic(() => import('../components/Map'), { ssr: false });
 
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [devices, setDevices] = useState([]);
+  const [selectedDevice, setSelectedDevice] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [stats, setStats] = useState({});
 
+  // --- Carga inicial de datos ---
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -33,106 +24,120 @@ export default function DashboardPage() {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       setUser(payload);
+      fetchDevices(token); // Al cargar, pedimos la lista de dispositivos
     } catch (e) {
       localStorage.removeItem('token');
       router.push('/login');
     }
-    setLoading(false);
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    router.push('/login');
+  // --- Funciones de API ---
+  const fetchDevices = async (token) => {
+    const res = await fetch('/api/devices', { headers: { 'Authorization': `Bearer ${token}` } });
+    if (res.ok) {
+      const data = await res.json();
+      setDevices(data);
+      if (data.length > 0) {
+        // Selecciona el primer dispositivo por defecto
+        handleDeviceSelect(data[0]);
+      }
+    }
   };
 
-  if (loading || !user) {
-    return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Cargando...</div>;
-  }
+  const handleDeviceSelect = (device) => {
+    setSelectedDevice(device);
+    // Aquí llamaríamos a una API para obtener el historial real del dispositivo
+    // Por ahora, seguimos usando los datos simulados para ese dispositivo.
+    setHistory(fakeDeviceHistory); // `fakeDeviceHistory` debe estar definido como antes
+    calculateStats(fakeDeviceHistory);
+  };
+  
+  const calculateStats = (historyData) => {
+    // Lógica real para calcular estadísticas iría aquí...
+    setStats({
+      distance: "4.8 km",
+      stops: 1,
+      stopTime: "10 min",
+      tripTime: "2h 40m"
+    });
+  };
 
-  // --- CÁLCULOS DE ESTADÍSTICAS (SIMULACIÓN) ---
-  const totalDistance = "4.8 km"; // Simulado
-  const totalStops = 1; // Simulado
-  const totalStopTime = "10 min"; // Simulado
-  const totalTripTime = "2h 40m"; // Simulado
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text("Reporte de Actividad - CritoBots", 14, 22);
+    doc.setFontSize(11);
+    doc.text(`Dispositivo: ${selectedDevice.name}`, 14, 32);
+    doc.text(`Fecha: ${new Date().toLocaleDateString('es-PY')}`, 14, 38);
+    
+    doc.setFontSize(12);
+    doc.text("Resumen del Día:", 14, 50);
+    doc.text(`- Distancia Total: ${stats.distance}`, 16, 58);
+    doc.text(`- Total de Paradas: ${stats.stops}`, 16, 64);
+    doc.text(`- Tiempo Detenido: ${stats.stopTime}`, 16, 70);
+    doc.text(`- Duración del Recorrido: ${stats.tripTime}`, 16, 76);
+    
+    doc.save(`reporte-${selectedDevice.name}-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
 
+  const handleLogout = () => { /* ... como antes ... */ };
+
+  if (!user) return <div>Cargando...</div>;
+
+  // --- El JSX del nuevo panel ---
   return (
     <>
-      <Head>
-        <title>Panel de Control - CritoBots</title>
-      </Head>
+      <Head><title>Panel - CritoBots</title></Head>
       <div className="min-h-screen flex text-white">
-        {/* ===== BARRA LATERAL (SIDEBAR) ===== */}
-        <aside className="w-64 bg-gray-900 p-6 flex flex-col">
-          <h1 className="text-2xl font-bold text-teal-400 mb-8">CritoBots</h1>
-          <nav className="flex-grow">
-            <ul>
-              <li className="mb-4">
-                <a href="#" className="flex items-center p-2 bg-gray-700 rounded-lg">
-                  <span className="mr-3">📍</span>Dispositivos
-                </a>
-              </li>
-              <li className="mb-4">
-                <a href="#" className="flex items-center p-2 hover:bg-gray-700 rounded-lg">
-                  <span className="mr-3">📈</span>Reportes
-                </a>
-              </li>
-               <li className="mb-4">
-                <a href="#" className="flex items-center p-2 hover:bg-gray-700 rounded-lg">
-                  <span className="mr-3">🎯</span>Puntos de Interés
-                </a>
-              </li>
-            </ul>
-          </nav>
-          <div className="mt-auto">
-            <p className="text-sm text-gray-400">{user.email}</p>
-            <button 
-              onClick={handleLogout}
-              className="w-full mt-2 px-4 py-2 bg-red-600 rounded-lg hover:bg-red-700 font-semibold"
-            >
-              Cerrar Sesión
-            </button>
-          </div>
+        <aside className="w-72 bg-gray-900 p-6 flex flex-col">
+            <h1 className="text-2xl font-bold text-teal-400 mb-8">CritoBots</h1>
+            <h2 className="text-xs uppercase text-gray-500 mb-4">Mis Dispositivos</h2>
+            <nav className="flex-grow">
+                <ul>
+                    {devices.map(device => (
+                        <li key={device.id} className="mb-2">
+                            <button 
+                                onClick={() => handleDeviceSelect(device)}
+                                className={`w-full flex items-center p-3 rounded-lg text-left ${selectedDevice?.id === device.id ? 'bg-teal-500' : 'hover:bg-gray-700'}`}
+                            >
+                                <span className="mr-3">📱</span>{device.name}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            </nav>
+            <div className="mt-auto">
+                <p className="text-sm text-gray-400">{user.email}</p>
+                <button onClick={handleLogout} className="w-full mt-2 ...">Cerrar Sesión</button>
+            </div>
         </aside>
-
-        {/* ===== CONTENIDO PRINCIPAL ===== */}
         <main className="flex-1 p-8 bg-gray-800">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* --- Columna Izquierda: Mapa --- */}
-            <div className="lg:col-span-2">
-              <h2 className="text-xl font-bold mb-4">Recorrido del Dispositivo "Móvil 1" (Hoy)</h2>
-              <div className="h-[65vh] w-full">
-                {/* El mapa ahora recibirá el historial para dibujarlo */}
-                <Map history={fakeDeviceHistory} />
-              </div>
-            </div>
-
-            {/* --- Columna Derecha: Estadísticas --- */}
-            <div className="bg-gray-900 p-6 rounded-lg">
-              <h3 className="text-lg font-bold mb-6">Resumen del Día</h3>
-              <div className="space-y-4 text-gray-300">
-                <div>
-                  <p className="text-sm text-gray-400">Distancia Total</p>
-                  <p className="text-2xl font-semibold text-teal-400">{totalDistance}</p>
+            {selectedDevice ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-2">
+                        <h2 className="text-xl font-bold mb-4">Recorrido de "{selectedDevice.name}"</h2>
+                        <div className="h-[65vh] w-full"><Map history={history} /></div>
+                    </div>
+                    <div className="bg-gray-900 p-6 rounded-lg">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-lg font-bold">Resumen del Día</h3>
+                            <button onClick={handleDownloadPDF} className="text-teal-400 text-sm hover:underline">Descargar PDF</button>
+                        </div>
+                        <div className="space-y-4 text-gray-300">
+                            <p>Distancia: <span className="font-semibold text-xl">{stats.distance}</span></p>
+                            <p>Paradas: <span className="font-semibold text-xl">{stats.stops}</span></p>
+                            {/* ... más estadísticas ... */}
+                        </div>
+                    </div>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-400">Total de Paradas</p>
-                  <p className="text-2xl font-semibold">{totalStops}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-400">Tiempo Total Detenido</p>
-                  <p className="text-2xl font-semibold">{totalStopTime}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-400">Duración del Recorrido</p>
-                  <p className="text-2xl font-semibold">{totalTripTime}</p>
-                </div>
-              </div>
-            </div>
-
-          </div>
+            ) : (
+                <div>Selecciona un dispositivo para ver su información.</div>
+            )}
         </main>
       </div>
     </>
   );
 }
+
+// No olvides definir fakeDeviceHistory aquí si lo usas para pruebas
+const fakeDeviceHistory = [ /* ... los mismos datos de antes ... */ ];
