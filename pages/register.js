@@ -1,22 +1,22 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { useState } from 'react';
+import { useRouter } from 'next/router'; // Importamos el enrutador
 
 export default function RegisterPage() {
   const [status, setStatus] = useState('');
+  const router = useRouter(); // Inicializamos el enrutador
 
   const handleSubmit = async (event) => {
-    event.preventDefault(); // Evita que la página se recargue
+    event.preventDefault();
     setStatus('Registrando, por favor espera...');
 
-    // Obtenemos los datos del formulario
     const formData = {
       nombre_empresa: event.target.nombre_empresa.value,
       email: event.target.email.value,
       contrasena: event.target.contrasena.value,
     };
 
-    // Enviamos los datos a nuestro "motor" (la API)
     const response = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -26,13 +26,19 @@ export default function RegisterPage() {
     const result = await response.json();
 
     if (response.ok) {
-      setStatus('¡Registro exitoso! ' + result.message);
+      setStatus('¡Registro exitoso! Serás redirigido al login.');
+      // ¡LA MAGIA! Esperamos 2 segundos y redirigimos.
+      setTimeout(() => {
+        router.push('/login');
+      }, 2000);
     } else {
       setStatus('Error: ' + result.message);
     }
   };
 
+  // El resto del JSX del formulario es el mismo.
   return (
+    // ... (El código del formulario que ya tenías se mantiene igual)
     <>
       <Head>
         <title>Registro - CritoBots</title>
