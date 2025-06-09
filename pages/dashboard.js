@@ -4,24 +4,52 @@ import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import jsPDF from 'jspdf';
 
-// Carga dinámica del mapa para que solo se ejecute en el navegador
 const Map = dynamic(() => import('../components/Map'), { ssr: false });
 
+// --- FUNCIONES DE CÁLCULO REALES ---
+
+/**
+ * Calcula la distancia entre dos puntos geográficos usando la fórmula de Haversine.
+ * @returns {number} Distancia en kilómetros.
+ */
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Radio de la Tierra en km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/**
+ * Formatea una duración en milisegundos a un string "Xh Ym".
+ * @param {number} ms - Duración en milisegundos.
+ * @returns {string} Duración formateada.
+ */
+function formatDuration(ms) {
+    if (ms < 0) ms = 0;
+    const hours = Math.floor(ms / 3600000);
+    const minutes = Math.floor((ms % 3600000) / 60000);
+    return `${hours}h ${minutes}m`;
+}
+
+
 export default function DashboardPage() {
-  // --- ESTADOS DE LA PÁGINA ---
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [devices, setDevices] = useState([]);
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [history, setHistory] = useState([]);
-  const [stats, setStats] = useState({});
+  const [stats, setStats] = useState({ distance: "0.0 km", stops: 0, stopTime: "0h 0m", tripTime: "0h 0m" });
   const [showAddDeviceModal, setShowAddDeviceModal] = useState(false);
   const [newDeviceName, setNewDeviceName] = useState('');
   const [newDeviceId, setNewDeviceId] = useState('');
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // --- EFECTO INICIAL: VERIFICA SESIÓN Y CARGA DATOS ---
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -38,19 +66,17 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // --- FUNCIÓN PARA OBTENER LA LISTA DE DISPOSITIVOS ---
   const fetchDevices = async (token) => {
     const res = await fetch('/api/devices', { headers: { 'Authorization': `Bearer ${token}` } });
     if (res.ok) {
       const data = await res.json();
       setDevices(data);
       if (data.length > 0) {
-        handleDeviceSelect(data[0]); // Selecciona el primer dispositivo por defecto
+        handleDeviceSelect(data[0]);
       }
     }
   };
 
-  // --- FUNCIÓN AL SELECCIONAR UN DISPOSITIVO DE LA LISTA ---
   const handleDeviceSelect = async (device) => {
     setSelectedDevice(device);
     setIsLoadingHistory(true);
@@ -67,10 +93,9 @@ export default function DashboardPage() {
       calculateStats(historyData);
     }
     setIsLoadingHistory(false);
-    setIsSidebarOpen(false); // Cierra el menú en móvil al seleccionar
+    setIsSidebarOpen(false);
   };
 
-  // --- FUNCIÓN PARA AÑADIR UN NUEVO DISPOSITIVO ---
   const handleAddDevice = async (event) => {
     event.preventDefault();
     const token = localStorage.getItem('token');
@@ -83,28 +108,61 @@ export default function DashboardPage() {
         setShowAddDeviceModal(false);
         setNewDeviceName('');
         setNewDeviceId('');
-        fetchDevices(token); // Vuelve a cargar la lista para mostrar el nuevo
+        fetchDevices(token);
     } else {
         const result = await response.json();
         alert(`Error: ${result.message}`);
     }
   };
-  
-  // --- FUNCIÓN PARA CALCULAR ESTADÍSTICAS (A FUTURO) ---
+
   const calculateStats = (historyData) => {
     if (historyData.length < 2) {
-      setStats({ distance: "0 km", stops: 0, stopTime: "0 min", tripTime: "0 min" });
+      setStats({ distance: "0.0 km", stops: 0, stopTime: "0h 0m", tripTime: "0h 0m" });
       return;
     }
+
+    let totalDistance = 0;
+    let totalStopTimeMs = 0;
+    let stopCount = 0;
+    
+    const STOP_RADIUS_KM = 0.05; // 50 metros para considerar una parada
+    const STOP_TIME_MS = 5 * 60 * 1000; // 5 minutos para que cuente como parada
+
+    let potentialStopTime = 0;
+
+    for (let i = 1; i < historyData.length; i++) {
+      const p1 = historyData[i - 1];
+      const p2 = historyData[i];
+      const distance = haversineDistance(p1.lat, p1.lng, p2.lat, p2.lng);
+      totalDistance += distance;
+
+      const timeDiff = new Date(p2.timestamp) - new Date(p1.timestamp);
+      if (distance < STOP_RADIUS_KM) {
+        potentialStopTime += timeDiff;
+      } else {
+        if (potentialStopTime >= STOP_TIME_MS) {
+          stopCount++;
+          totalStopTimeMs += potentialStopTime;
+        }
+        potentialStopTime = 0;
+      }
+    }
+    
+    if (potentialStopTime >= STOP_TIME_MS) {
+        stopCount++;
+        totalStopTimeMs += potentialStopTime;
+    }
+
+    const tripTimeMs = new Date(historyData[historyData.length - 1].timestamp) - new Date(historyData[0].timestamp);
+
     setStats({
-        distance: "Calculando...",
-        stops: "Calculando...",
-        stopTime: "Calculando...",
-        tripTime: "Calculando...",
+        distance: `${totalDistance.toFixed(1)} km`,
+        stops: stopCount,
+        stopTime: formatDuration(totalStopTimeMs),
+        tripTime: formatDuration(tripTimeMs)
     });
   };
 
-  // --- FUNCIÓN PARA DESCARGAR EL PDF ---
   const handleDownloadPDF = () => {
     if (!selectedDevice) return;
     const doc = new jsPDF();
@@ -123,7 +181,6 @@ export default function DashboardPage() {
     doc.save(`reporte-${selectedDevice.name}-${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
-  // --- FUNCIÓN PARA CERRAR SESIÓN ---
   const handleLogout = () => {
     localStorage.removeItem('token');
     router.push('/login');
@@ -131,7 +188,6 @@ export default function DashboardPage() {
 
   if (!user) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Cargando...</div>;
 
-  // --- RENDERIZADO DE LA PÁGINA (JSX) ---
   return (
     <>
       <Head>
@@ -139,8 +195,11 @@ export default function DashboardPage() {
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
       <div className="flex h-screen bg-gray-800 text-white">
-        
-        <aside className={`bg-gray-900 w-72 flex-shrink-0 p-6 flex flex-col fixed h-full md:relative md:flex transition-transform duration-300 ease-in-out z-40 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        <aside className={`bg-gray-900 w-72 flex-shrink-0 p-6 flex flex-col
+          fixed h-full md:relative md:flex
+          transition-transform duration-300 ease-in-out z-40
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+          
             <h1 className="text-2xl font-bold text-teal-400 mb-8 hidden md:block">CritoBots</h1>
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xs uppercase text-gray-500">Mis Dispositivos</h2>
@@ -150,7 +209,10 @@ export default function DashboardPage() {
                 <ul>
                     {devices.map(device => (
                         <li key={device.id} className="mb-2">
-                            <button onClick={() => handleDeviceSelect(device)} className={`w-full flex items-center p-3 rounded-lg text-left transition-colors ${selectedDevice?.id === device.id ? 'bg-teal-500' : 'hover:bg-gray-700'}`}>
+                            <button 
+                                onClick={() => handleDeviceSelect(device)}
+                                className={`w-full flex items-center p-3 rounded-lg text-left transition-colors ${selectedDevice?.id === device.id ? 'bg-teal-500' : 'hover:bg-gray-700'}`}
+                            >
                                 <span className="mr-3 text-lg">📱</span>{device.name}
                             </button>
                         </li>
@@ -164,7 +226,7 @@ export default function DashboardPage() {
         </aside>
         
         <div className="flex flex-col flex-1">
-            <header className="bg-gray-800 text-white flex justify-between md:hidden sticky top-0 z-10">
+            <header className="bg-gray-800 text-white flex justify-between md:hidden sticky top-0 z-20">
                 <a href="#" className="block p-4 font-bold text-teal-400">CritoBots</a>
                 <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-4 focus:outline-none focus:bg-gray-700">
                     <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
@@ -212,12 +274,10 @@ export default function DashboardPage() {
                         <div className="mb-4">
                             <label htmlFor="deviceName" className="block text-gray-400 mb-2">Nombre del Dispositivo</label>
                             <input type="text" id="deviceName" value={newDeviceName} onChange={(e) => setNewDeviceName(e.target.value)} className="w-full p-2 bg-gray-700 rounded" required />
-                            <p className="text-xs text-gray-500 mt-1">Ej: "Móvil de Juan", "Camioneta 1"</p>
                         </div>
                         <div className="mb-6">
                             <label htmlFor="deviceId" className="block text-gray-400 mb-2">ID Único del Dispositivo</label>
                             <input type="text" id="deviceId" value={newDeviceId} onChange={(e) => setNewDeviceId(e.target.value)} className="w-full p-2 bg-gray-700 rounded" required />
-                            <p className="text-xs text-gray-500 mt-1">Este es el ID que genera la App APK en el teléfono.</p>
                         </div>
                         <div className="flex justify-end gap-4">
                             <button type="button" onClick={() => setShowAddDeviceModal(false)} className="px-4 py-2 bg-gray-600 rounded">Cancelar</button>
