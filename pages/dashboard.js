@@ -6,6 +6,14 @@ import jsPDF from 'jspdf';
 
 const Map = dynamic(() => import('../components/Map'), { ssr: false });
 
+// --- DATOS DE SIMULACIÓN ---
+// Usaremos estos datos para cualquier dispositivo seleccionado, hasta que tengamos datos reales.
+const fakeDeviceHistory = [
+    { lat: -25.2825, lng: -57.633, timestamp: '2023-11-01T08:05:00-03:00' },
+    { lat: -25.278, lng: -57.62, timestamp: '2023-11-01T08:30:00-03:00' },
+    { lat: -25.292, lng: -57.61, timestamp: '2023-11-01T09:15:00-03:00' },
+];
+
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
@@ -13,8 +21,6 @@ export default function DashboardPage() {
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [history, setHistory] = useState([]);
   const [stats, setStats] = useState({});
-  
-  // --- NUEVO: Estado para controlar el formulario de añadir dispositivo ---
   const [showAddDeviceModal, setShowAddDeviceModal] = useState(false);
   const [newDeviceName, setNewDeviceName] = useState('');
   const [newDeviceId, setNewDeviceId] = useState('');
@@ -46,25 +52,21 @@ export default function DashboardPage() {
     }
   };
 
-  // --- NUEVO: Función para guardar un nuevo dispositivo ---
   const handleAddDevice = async (event) => {
     event.preventDefault();
     const token = localStorage.getItem('token');
     
     const response = await fetch('/api/devices', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ deviceName: newDeviceName, deviceId: newDeviceId })
     });
 
     if (response.ok) {
-        setShowAddDeviceModal(false); // Cierra el formulario
+        setShowAddDeviceModal(false);
         setNewDeviceName('');
         setNewDeviceId('');
-        fetchDevices(token); // Vuelve a cargar la lista de dispositivos para que aparezca el nuevo
+        fetchDevices(token);
     } else {
         const result = await response.json();
         alert(`Error: ${result.message}`);
@@ -81,8 +83,27 @@ export default function DashboardPage() {
     setStats({ distance: "4.8 km", stops: 1, stopTime: "10 min", tripTime: "2h 40m" });
   };
 
-  const handleDownloadPDF = () => { /* ... como antes ... */ };
-  const handleLogout = () => { /* ... como antes ... */ };
+  const handleDownloadPDF = () => {
+    if (!selectedDevice) return;
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text("Reporte de Actividad - CritoBots", 14, 22);
+    doc.setFontSize(11);
+    doc.text(`Dispositivo: ${selectedDevice.name}`, 14, 32);
+    doc.text(`Fecha: ${new Date().toLocaleDateString('es-PY')}`, 14, 38);
+    doc.setFontSize(12);
+    doc.text("Resumen del Día:", 14, 50);
+    doc.text(`- Distancia Total: ${stats.distance}`, 16, 58);
+    doc.text(`- Total de Paradas: ${stats.stops}`, 16, 64);
+    doc.text(`- Tiempo Detenido: ${stats.stopTime}`, 16, 70);
+    doc.text(`- Duración del Recorrido: ${stats.tripTime}`, 16, 76);
+    doc.save(`reporte-${selectedDevice.name}-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    router.push('/login');
+  };
 
   if (!user) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Cargando...</div>;
 
@@ -94,36 +115,59 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold text-teal-400 mb-8">CritoBots</h1>
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xs uppercase text-gray-500">Mis Dispositivos</h2>
-                {/* --- NUEVO: Botón para abrir el formulario --- */}
-                <button onClick={() => setShowAddDeviceModal(true)} className="px-2 py-1 bg-teal-500 text-xs rounded hover:bg-teal-600">+</button>
+                <button onClick={() => setShowAddDeviceModal(true)} className="px-2 py-1 bg-teal-500 text-white text-xs rounded hover:bg-teal-600">+</button>
             </div>
             <nav className="flex-grow">
                 <ul>
                     {devices.map(device => (
                         <li key={device.id} className="mb-2">
-                            <button onClick={() => handleDeviceSelect(device)} className={`w-full ...`}>📱 {device.name}</button>
+                            <button 
+                                onClick={() => handleDeviceSelect(device)}
+                                className={`w-full flex items-center p-3 rounded-lg text-left transition-colors ${selectedDevice?.id === device.id ? 'bg-teal-500' : 'hover:bg-gray-700'}`}
+                            >
+                                <span className="mr-3 text-lg">📱</span>{device.name}
+                            </button>
                         </li>
                     ))}
                 </ul>
             </nav>
             <div className="mt-auto">
                 <p className="text-sm text-gray-400">{user.email}</p>
-                <button onClick={handleLogout} className="w-full mt-2 ...">Cerrar Sesión</button>
+                <button onClick={handleLogout} className="w-full mt-2 px-4 py-2 bg-red-600 rounded-lg hover:bg-red-700 font-semibold">
+                  Cerrar Sesión
+                </button>
             </div>
         </aside>
         <main className="flex-1 p-8 bg-gray-800">
             {selectedDevice ? (
-                // ... El contenido del mapa y estadísticas se mantiene igual ...
-                <div className="lg:col-span-2">...</div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-2">
+                        <h2 className="text-xl font-bold mb-4">Recorrido de "{selectedDevice.name}"</h2>
+                        <div className="h-[65vh] w-full"><Map history={history} /></div>
+                    </div>
+                    <div className="bg-gray-900 p-6 rounded-lg">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-lg font-bold">Resumen del Día</h3>
+                            <button onClick={handleDownloadPDF} className="text-teal-400 text-sm hover:underline">Descargar PDF</button>
+                        </div>
+                        <div className="space-y-4 text-gray-300">
+                            <div><p className="text-sm text-gray-400">Distancia</p><p className="font-semibold text-xl text-teal-400">{stats.distance}</p></div>
+                            <div><p className="text-sm text-gray-400">Paradas</p><p className="font-semibold text-xl">{stats.stops}</p></div>
+                            <div><p className="text-sm text-gray-400">Tiempo Detenido</p><p className="font-semibold text-xl">{stats.stopTime}</p></div>
+                            <div><p className="text-sm text-gray-400">Duración Recorrido</p><p className="font-semibold text-xl">{stats.tripTime}</p></div>
+                        </div>
+                    </div>
+                </div>
             ) : (
-                <div className="text-center text-gray-400">
-                    <p>No tienes dispositivos registrados.</p>
-                    <button onClick={() => setShowAddDeviceModal(true)} className="mt-4 px-4 py-2 bg-teal-500 rounded-lg">Añade tu primer dispositivo</button>
+                <div className="flex items-center justify-center h-full text-center text-gray-400">
+                    <div>
+                        <p>No tienes dispositivos registrados.</p>
+                        <button onClick={() => setShowAddDeviceModal(true)} className="mt-4 px-4 py-2 bg-teal-500 rounded-lg">Añade tu primer dispositivo</button>
+                    </div>
                 </div>
             )}
         </main>
 
-        {/* --- NUEVO: El formulario (modal) para añadir dispositivos --- */}
         {showAddDeviceModal && (
             <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
                 <div className="bg-gray-900 p-8 rounded-lg shadow-xl w-full max-w-md">
@@ -151,6 +195,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-// El código de handleDownloadPDF, handleLogout, y fakeDeviceHistory debe ser completado
-// basándonos en el código del paso anterior para que no falte nada.
