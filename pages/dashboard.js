@@ -6,15 +6,8 @@ import jsPDF from 'jspdf';
 
 const Map = dynamic(() => import('../components/Map'), { ssr: false });
 
-// --- DATOS DE SIMULACIÓN ---
-// Usaremos estos datos para cualquier dispositivo seleccionado, hasta que tengamos datos reales.
-const fakeDeviceHistory = [
-    { lat: -25.2825, lng: -57.633, timestamp: '2023-11-01T08:05:00-03:00' },
-    { lat: -25.278, lng: -57.62, timestamp: '2023-11-01T08:30:00-03:00' },
-    { lat: -25.292, lng: -57.61, timestamp: '2023-11-01T09:15:00-03:00' },
-];
-
 export default function DashboardPage() {
+  // --- ESTADOS DE LA PÁGINA ---
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [devices, setDevices] = useState([]);
@@ -24,7 +17,9 @@ export default function DashboardPage() {
   const [showAddDeviceModal, setShowAddDeviceModal] = useState(false);
   const [newDeviceName, setNewDeviceName] = useState('');
   const [newDeviceId, setNewDeviceId] = useState('');
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
+  // --- EFECTO INICIAL PARA VERIFICAR SESIÓN Y CARGAR DATOS ---
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -41,15 +36,34 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // --- FUNCIONES PARA COMUNICARSE CON LA API ---
   const fetchDevices = async (token) => {
     const res = await fetch('/api/devices', { headers: { 'Authorization': `Bearer ${token}` } });
     if (res.ok) {
       const data = await res.json();
       setDevices(data);
-      if (data.length > 0 && !selectedDevice) {
-        handleDeviceSelect(data[0]);
+      if (data.length > 0) {
+        handleDeviceSelect(data[0]); // Selecciona el primer dispositivo por defecto
       }
     }
+  };
+
+  const handleDeviceSelect = async (device) => {
+    setSelectedDevice(device);
+    setIsLoadingHistory(true);
+    setHistory([]);
+    
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api/history?deviceId=${device.deviceId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (res.ok) {
+      const historyData = await res.json();
+      setHistory(historyData);
+      calculateStats(historyData);
+    }
+    setIsLoadingHistory(false);
   };
 
   const handleAddDevice = async (event) => {
@@ -72,15 +86,20 @@ export default function DashboardPage() {
         alert(`Error: ${result.message}`);
     }
   };
-
-  const handleDeviceSelect = (device) => {
-    setSelectedDevice(device);
-    setHistory(fakeDeviceHistory);
-    calculateStats(fakeDeviceHistory);
-  };
-
+  
+  // --- FUNCIONES AUXILIARES ---
   const calculateStats = (historyData) => {
-    setStats({ distance: "4.8 km", stops: 1, stopTime: "10 min", tripTime: "2h 40m" });
+    if (historyData.length < 2) {
+      setStats({ distance: "0 km", stops: 0, stopTime: "0 min", tripTime: "0 min" });
+      return;
+    }
+    // En el futuro, aquí irá la lógica de cálculo real
+    setStats({
+        distance: "Calculando...",
+        stops: "Calculando...",
+        stopTime: "Calculando...",
+        tripTime: "Calculando...",
+    });
   };
 
   const handleDownloadPDF = () => {
@@ -107,6 +126,7 @@ export default function DashboardPage() {
 
   if (!user) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Cargando...</div>;
 
+  // --- RENDERIZADO DE LA PÁGINA (JSX) ---
   return (
     <>
       <Head><title>Panel - CritoBots</title></Head>
@@ -143,10 +163,16 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-2">
                         <h2 className="text-xl font-bold mb-4">Recorrido de "{selectedDevice.name}"</h2>
-                        <div className="h-[65vh] w-full"><Map history={history} /></div>
+                        <div className="h-[65vh] w-full bg-gray-700 rounded-lg flex items-center justify-center">
+                            {isLoadingHistory ? (
+                                <p className="p-4">Cargando historial...</p>
+                            ) : (
+                                <Map history={history} />
+                            )}
+                        </div>
                     </div>
                     <div className="bg-gray-900 p-6 rounded-lg">
-                        <div className="flex justify-between items-center mb-6">
+                       <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-bold">Resumen del Día</h3>
                             <button onClick={handleDownloadPDF} className="text-teal-400 text-sm hover:underline">Descargar PDF</button>
                         </div>
@@ -167,10 +193,9 @@ export default function DashboardPage() {
                 </div>
             )}
         </main>
-
         {showAddDeviceModal && (
             <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-                <div className="bg-gray-900 p-8 rounded-lg shadow-xl w-full max-w-md">
+               <div className="bg-gray-900 p-8 rounded-lg shadow-xl w-full max-w-md">
                     <h2 className="text-xl font-bold mb-6">Añadir Nuevo Dispositivo</h2>
                     <form onSubmit={handleAddDevice}>
                         <div className="mb-4">
