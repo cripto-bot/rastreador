@@ -17,7 +17,6 @@ export default function Map({ history }) {
   if (!history || history.length === 0) {
     return (
       <MapContainer center={[-25.30066, -57.63591]} zoom={13} maxZoom={20} style={{ height: '100%', width: '100%' }} className="rounded-lg">
-        {/* --- VOLVEMOS AL MAPA ORIGINAL (OPENSTREETMAP) --- */}
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -42,7 +41,13 @@ export default function Map({ history }) {
       
       <Polyline pathOptions={{ color: 'blue', weight: 3 }} positions={positions} />
 
-      {/* ... marcadores de inicio y fin como antes ... */}
+      <Marker position={positions[0]}>
+        <Popup>Inicio del Recorrido - {new Date(history[0].timestamp).toLocaleTimeString('es-PY', { timeZone: 'America/Asuncion' })}</Popup>
+      </Marker>
+
+      <Marker position={positions[positions.length - 1]}>
+        <Popup>Última Ubicación - {new Date(history[history.length - 1].timestamp).toLocaleTimeString('es-PY', { timeZone: 'America/Asuncion' })}</Popup>
+      </Marker>
     </MapContainer>
   );
 }
