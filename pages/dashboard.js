@@ -6,13 +6,6 @@ import jsPDF from 'jspdf';
 
 const Map = dynamic(() => import('../components/Map'), { ssr: false });
 
-// --- DATOS DE SIMULACIÓN (HASTA QUE TENGAMOS DATOS REALES DEL APK) ---
-const fakeDeviceHistory = [
-    { lat: -25.2825, lng: -57.633, timestamp: '2023-11-01T08:05:00-03:00' },
-    { lat: -25.278, lng: -57.62, timestamp: '2023-11-01T08:30:00-03:00' },
-    { lat: -25.292, lng: -57.61, timestamp: '2023-11-01T09:15:00-03:00' },
-];
-
 export default function DashboardPage() {
   // --- ESTADOS DE LA PÁGINA ---
   const router = useRouter();
@@ -25,7 +18,7 @@ export default function DashboardPage() {
   const [newDeviceName, setNewDeviceName] = useState('');
   const [newDeviceId, setNewDeviceId] = useState('');
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Para el menú en móviles
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // --- EFECTO INICIAL PARA VERIFICAR SESIÓN Y CARGAR DATOS ---
   useEffect(() => {
@@ -68,14 +61,8 @@ export default function DashboardPage() {
 
     if (res.ok) {
       const historyData = await res.json();
-      // SI NO HAY DATOS REALES, USAMOS LOS DE SIMULACIÓN
-      if (historyData.length === 0) {
-        setHistory(fakeDeviceHistory);
-        calculateStats(fakeDeviceHistory);
-      } else {
-        setHistory(historyData);
-        calculateStats(historyData);
-      }
+      setHistory(historyData);
+      calculateStats(historyData);
     }
     setIsLoadingHistory(false);
     setIsSidebarOpen(false); // Cierra el menú al seleccionar en móvil
@@ -84,11 +71,13 @@ export default function DashboardPage() {
   const handleAddDevice = async (event) => {
     event.preventDefault();
     const token = localStorage.getItem('token');
+    
     const response = await fetch('/api/devices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ deviceName: newDeviceName, deviceId: newDeviceId })
     });
+
     if (response.ok) {
         setShowAddDeviceModal(false);
         setNewDeviceName('');
@@ -106,13 +95,34 @@ export default function DashboardPage() {
       setStats({ distance: "0 km", stops: 0, stopTime: "0 min", tripTime: "0 min" });
       return;
     }
+    // En un futuro, aquí irá la lógica de cálculo real
     setStats({
-        distance: "Calculando...", stops: "Calculando...",
-        stopTime: "Calculando...", tripTime: "Calculando...",
+        distance: "Calculando...",
+        stops: "Calculando...",
+        stopTime: "Calculando...",
+        tripTime: "Calculando...",
     });
   };
 
-  const handleDownloadPDF = () => { /* ... como antes ... */ };
+  const handleDownloadPDF = () => {
+    if (!selectedDevice) return;
+    const doc = new jsPDF();
+    const fechaParaguay = new Date().toLocaleDateString('es-PY', { timeZone: 'America/Asuncion' });
+
+    doc.setFontSize(18);
+    doc.text("Reporte de Actividad - CritoBots", 14, 22);
+    doc.setFontSize(11);
+    doc.text(`Dispositivo: ${selectedDevice.name}`, 14, 32);
+    doc.text(`Fecha: ${fechaParaguay}`, 14, 38);
+    doc.setFontSize(12);
+    doc.text("Resumen del Día:", 14, 50);
+    doc.text(`- Distancia Total: ${stats.distance}`, 16, 58);
+    doc.text(`- Total de Paradas: ${stats.stops}`, 16, 64);
+    doc.text(`- Tiempo Detenido: ${stats.stopTime}`, 16, 70);
+    doc.text(`- Duración del Recorrido: ${stats.tripTime}`, 16, 76);
+    doc.save(`reporte-${selectedDevice.name}-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     router.push('/login');
@@ -123,10 +133,13 @@ export default function DashboardPage() {
   // --- RENDERIZADO DE LA PÁGINA (JSX) ---
   return (
     <>
-      <Head><title>Panel - CritoBots</title></Head>
+      <Head>
+        <title>Panel - CritoBots</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      </Head>
       <div className="relative min-h-screen md:flex text-white">
         
-        <div className="bg-gray-800 text-white flex justify-between md:hidden">
+        <div className="bg-gray-800 text-white flex justify-between md:hidden sticky top-0 z-20">
           <a href="#" className="block p-4 font-bold text-teal-400">CritoBots</a>
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-4 focus:outline-none focus:bg-gray-700">
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -135,17 +148,17 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        <aside className={`bg-gray-900 w-72 p-6 flex flex-col
-          absolute inset-y-0 left-0 transform md:relative md:translate-x-0
-          transition-transform duration-300 ease-in-out z-40
-          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <aside className={`bg-gray-900 w-72 p-6 flex-col
+          fixed h-full md:relative md:flex
+          transition-transform duration-300 ease-in-out z-30
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
           
             <h1 className="text-2xl font-bold text-teal-400 mb-8 hidden md:block">CritoBots</h1>
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xs uppercase text-gray-500">Mis Dispositivos</h2>
                 <button onClick={() => setShowAddDeviceModal(true)} className="px-2 py-1 bg-teal-500 text-white text-xs rounded hover:bg-teal-600">+</button>
             </div>
-            <nav className="flex-grow">
+            <nav className="flex-grow overflow-y-auto">
                 <ul>
                     {devices.map(device => (
                         <li key={device.id} className="mb-2">
@@ -159,8 +172,8 @@ export default function DashboardPage() {
                     ))}
                 </ul>
             </nav>
-            <div className="mt-auto">
-                <p className="text-sm text-gray-400">{user.email}</p>
+            <div className="mt-auto pt-4 border-t border-gray-700">
+                <p className="text-sm text-gray-400 truncate">{user.email}</p>
                 <button onClick={handleLogout} className="w-full mt-2 px-4 py-2 bg-red-600 rounded-lg hover:bg-red-700 font-semibold">
                   Cerrar Sesión
                 </button>
