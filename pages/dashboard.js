@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import jsPDF from 'jspdf';
 
+// Carga dinámica del mapa para que solo se ejecute en el navegador
 const Map = dynamic(() => import('../components/Map'), { ssr: false });
 
 export default function DashboardPage() {
@@ -20,7 +21,7 @@ export default function DashboardPage() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // --- EFECTO INICIAL ---
+  // --- EFECTO INICIAL: VERIFICA SESIÓN Y CARGA DATOS ---
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -37,18 +38,19 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // --- FUNCIONES DE API ---
+  // --- FUNCIÓN PARA OBTENER LA LISTA DE DISPOSITIVOS ---
   const fetchDevices = async (token) => {
     const res = await fetch('/api/devices', { headers: { 'Authorization': `Bearer ${token}` } });
     if (res.ok) {
       const data = await res.json();
       setDevices(data);
       if (data.length > 0) {
-        handleDeviceSelect(data[0]);
+        handleDeviceSelect(data[0]); // Selecciona el primer dispositivo por defecto
       }
     }
   };
 
+  // --- FUNCIÓN AL SELECCIONAR UN DISPOSITIVO DE LA LISTA ---
   const handleDeviceSelect = async (device) => {
     setSelectedDevice(device);
     setIsLoadingHistory(true);
@@ -65,9 +67,10 @@ export default function DashboardPage() {
       calculateStats(historyData);
     }
     setIsLoadingHistory(false);
-    setIsSidebarOpen(false);
+    setIsSidebarOpen(false); // Cierra el menú en móvil al seleccionar
   };
 
+  // --- FUNCIÓN PARA AÑADIR UN NUEVO DISPOSITIVO ---
   const handleAddDevice = async (event) => {
     event.preventDefault();
     const token = localStorage.getItem('token');
@@ -80,31 +83,55 @@ export default function DashboardPage() {
         setShowAddDeviceModal(false);
         setNewDeviceName('');
         setNewDeviceId('');
-        fetchDevices(token);
+        fetchDevices(token); // Vuelve a cargar la lista para mostrar el nuevo
     } else {
         const result = await response.json();
         alert(`Error: ${result.message}`);
     }
   };
   
-  // --- FUNCIONES AUXILIARES ---
+  // --- FUNCIÓN PARA CALCULAR ESTADÍSTICAS (A FUTURO) ---
   const calculateStats = (historyData) => {
     if (historyData.length < 2) {
       setStats({ distance: "0 km", stops: 0, stopTime: "0 min", tripTime: "0 min" });
       return;
     }
     setStats({
-        distance: "Calculando...", stops: "Calculando...",
-        stopTime: "Calculando...", tripTime: "Calculando...",
+        distance: "Calculando...",
+        stops: "Calculando...",
+        stopTime: "Calculando...",
+        tripTime: "Calculando...",
     });
   };
 
-  const handleDownloadPDF = () => { /* ... como antes ... */ };
-  const handleLogout = () => { /* ... como antes ... */ };
+  // --- FUNCIÓN PARA DESCARGAR EL PDF ---
+  const handleDownloadPDF = () => {
+    if (!selectedDevice) return;
+    const doc = new jsPDF();
+    const fechaParaguay = new Date().toLocaleDateString('es-PY', { timeZone: 'America/Asuncion' });
+    doc.setFontSize(18);
+    doc.text("Reporte de Actividad - CritoBots", 14, 22);
+    doc.setFontSize(11);
+    doc.text(`Dispositivo: ${selectedDevice.name}`, 14, 32);
+    doc.text(`Fecha: ${fechaParaguay}`, 14, 38);
+    doc.setFontSize(12);
+    doc.text("Resumen del Día:", 14, 50);
+    doc.text(`- Distancia Total: ${stats.distance}`, 16, 58);
+    doc.text(`- Total de Paradas: ${stats.stops}`, 16, 64);
+    doc.text(`- Tiempo Detenido: ${stats.stopTime}`, 16, 70);
+    doc.text(`- Duración del Recorrido: ${stats.tripTime}`, 16, 76);
+    doc.save(`reporte-${selectedDevice.name}-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  // --- FUNCIÓN PARA CERRAR SESIÓN ---
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    router.push('/login');
+  };
 
   if (!user) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Cargando...</div>;
 
-  // --- RENDERIZADO (JSX) CON LA ESTRUCTURA CORREGIDA ---
+  // --- RENDERIZADO DE LA PÁGINA (JSX) ---
   return (
     <>
       <Head>
@@ -113,12 +140,7 @@ export default function DashboardPage() {
       </Head>
       <div className="flex h-screen bg-gray-800 text-white">
         
-        {/* --- BARRA LATERAL (SIDEBAR) con lógica Z-INDEX para móviles --- */}
-        <aside className={`bg-gray-900 w-72 flex-shrink-0 p-6 flex-col
-          fixed h-full md:relative md:flex
-          transition-transform duration-300 ease-in-out z-40  
-          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-          
+        <aside className={`bg-gray-900 w-72 flex-shrink-0 p-6 flex flex-col fixed h-full md:relative md:flex transition-transform duration-300 ease-in-out z-40 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
             <h1 className="text-2xl font-bold text-teal-400 mb-8 hidden md:block">CritoBots</h1>
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xs uppercase text-gray-500">Mis Dispositivos</h2>
@@ -142,17 +164,13 @@ export default function DashboardPage() {
         </aside>
         
         <div className="flex flex-col flex-1">
-            {/* --- BARRA SUPERIOR (HEADER) con el botón de hamburguesa --- */}
             <header className="bg-gray-800 text-white flex justify-between md:hidden sticky top-0 z-10">
                 <a href="#" className="block p-4 font-bold text-teal-400">CritoBots</a>
                 <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-4 focus:outline-none focus:bg-gray-700">
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
                 </button>
             </header>
 
-            {/* --- CONTENIDO PRINCIPAL --- */}
             <main className="flex-1 p-4 md:p-8 overflow-y-auto">
                 {selectedDevice ? (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -163,21 +181,50 @@ export default function DashboardPage() {
                             </div>
                         </div>
                         <div className="bg-gray-900 p-6 rounded-lg">
-                            {/* ... Panel de estadísticas como antes ... */}
+                           <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-lg font-bold">Resumen del Día</h3>
+                                <button onClick={handleDownloadPDF} className="text-teal-400 text-sm hover:underline">Descargar PDF</button>
+                            </div>
+                            <div className="space-y-4 text-gray-300">
+                                <div><p className="text-sm text-gray-400">Distancia</p><p className="font-semibold text-xl text-teal-400">{stats.distance}</p></div>
+                                <div><p className="text-sm text-gray-400">Paradas</p><p className="font-semibold text-xl">{stats.stops}</p></div>
+                                <div><p className="text-sm text-gray-400">Tiempo Detenido</p><p className="font-semibold text-xl">{stats.stopTime}</p></div>
+                                <div><p className="text-sm text-gray-400">Duración Recorrido</p><p className="font-semibold text-xl">{stats.tripTime}</p></div>
+                            </div>
                         </div>
                     </div>
                 ) : (
                     <div className="flex items-center justify-center h-full text-center text-gray-400">
-                        {/* ... Mensaje de añadir dispositivo como antes ... */}
+                        <div>
+                            <p>No tienes dispositivos registrados.</p>
+                            <button onClick={() => setShowAddDeviceModal(true)} className="mt-4 px-4 py-2 bg-teal-500 rounded-lg">Añade tu primer dispositivo</button>
+                        </div>
                     </div>
                 )}
             </main>
         </div>
 
-        {/* FORMULARIO MODAL (sin cambios, pero con el z-index correcto) */}
         {showAddDeviceModal && (
             <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center" style={{ zIndex: 9999 }}>
-                {/* ... El formulario modal es igual */}
+               <div className="bg-gray-900 p-8 rounded-lg shadow-xl w-full max-w-md">
+                    <h2 className="text-xl font-bold mb-6">Añadir Nuevo Dispositivo</h2>
+                    <form onSubmit={handleAddDevice}>
+                        <div className="mb-4">
+                            <label htmlFor="deviceName" className="block text-gray-400 mb-2">Nombre del Dispositivo</label>
+                            <input type="text" id="deviceName" value={newDeviceName} onChange={(e) => setNewDeviceName(e.target.value)} className="w-full p-2 bg-gray-700 rounded" required />
+                            <p className="text-xs text-gray-500 mt-1">Ej: "Móvil de Juan", "Camioneta 1"</p>
+                        </div>
+                        <div className="mb-6">
+                            <label htmlFor="deviceId" className="block text-gray-400 mb-2">ID Único del Dispositivo</label>
+                            <input type="text" id="deviceId" value={newDeviceId} onChange={(e) => setNewDeviceId(e.target.value)} className="w-full p-2 bg-gray-700 rounded" required />
+                            <p className="text-xs text-gray-500 mt-1">Este es el ID que genera la App APK en el teléfono.</p>
+                        </div>
+                        <div className="flex justify-end gap-4">
+                            <button type="button" onClick={() => setShowAddDeviceModal(false)} className="px-4 py-2 bg-gray-600 rounded">Cancelar</button>
+                            <button type="submit" className="px-4 py-2 bg-teal-500 rounded">Guardar Dispositivo</button>
+                        </div>
+                    </form>
+                </div>
             </div>
         )}
       </div>
