@@ -43,7 +43,7 @@ export default function DashboardPage() {
       const data = await res.json();
       setDevices(data);
       if (data.length > 0) {
-        handleDeviceSelect(data[0]); // Selecciona el primer dispositivo por defecto
+        handleDeviceSelect(data[0]);
       }
     }
   };
@@ -105,11 +105,15 @@ export default function DashboardPage() {
   const handleDownloadPDF = () => {
     if (!selectedDevice) return;
     const doc = new jsPDF();
+    
+    // --- ¡NUEVO! Usamos la zona horaria de Paraguay para el PDF ---
+    const fechaParaguay = new Date().toLocaleDateString('es-PY', { timeZone: 'America/Asuncion' });
+
     doc.setFontSize(18);
     doc.text("Reporte de Actividad - CritoBots", 14, 22);
     doc.setFontSize(11);
     doc.text(`Dispositivo: ${selectedDevice.name}`, 14, 32);
-    doc.text(`Fecha: ${new Date().toLocaleDateString('es-PY')}`, 14, 38);
+    doc.text(`Fecha: ${fechaParaguay}`, 14, 38);
     doc.setFontSize(12);
     doc.text("Resumen del Día:", 14, 50);
     doc.text(`- Distancia Total: ${stats.distance}`, 16, 58);
@@ -194,7 +198,8 @@ export default function DashboardPage() {
             )}
         </main>
         {showAddDeviceModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+            // --- ¡AQUÍ ESTÁ LA CORRECCIÓN FINAL! ---
+            <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center" style={{ zIndex: 9999 }}>
                <div className="bg-gray-900 p-8 rounded-lg shadow-xl w-full max-w-md">
                     <h2 className="text-xl font-bold mb-6">Añadir Nuevo Dispositivo</h2>
                     <form onSubmit={handleAddDevice}>
