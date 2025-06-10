@@ -1,74 +1,57 @@
-import Head from 'next/head';
-import Link from 'next/link';
-import { useState } from 'react';
-import { useRouter } from 'next/router'; // Importamos el enrutador
+import { promises as fs } from 'fs';
+import path from 'path';
+import jwt from 'jsonwebtoken'; // Importamos la herramienta para crear la "llave"
 
-export default function LoginPage() {
-  const [status, setStatus] = useState('');
-  const router = useRouter(); // Inicializamos el enrutador
+// Función para obtener la ruta correcta de la base de datos
+function getDbPath() {
+  // En Vercel, el único lugar donde se puede escribir es /tmp
+  const dir = process.env.VERCEL ? '/tmp' : 'db';
+  return path.join(dir, 'empresas.json');
+}
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setStatus('Verificando credenciales...');
+export default async function handler(req, res) {
+  // Nos aseguramos de que la petición sea por el método POST
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Método no permitido' });
+  }
 
-    const formData = {
-      email: event.target.email.value,
-      contrasena: event.target.contrasena.value,
-    };
+  try {
+    // Obtenemos el email y la contraseña que envió el formulario
+    const { email, contrasena } = req.body;
+    const dbPath = getDbPath();
 
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData),
-    });
-
-    const result = await response.json();
-
-    if (response.ok) {
-      // --- ¡CAMBIOS IMPORTANTES AQUÍ! ---
-      // 1. Guardamos la "llave" (token) en el bolsillo del navegador.
-      localStorage.setItem('token', result.token);
-      
-      setStatus('¡Inicio de sesión exitoso! Redirigiendo...');
-      
-      // 2. Redirigimos al usuario al nuevo panel de control.
-      router.push('/dashboard');
-    } else {
-      setStatus('Error: ' + result.message);
+    let dbData = [];
+    try {
+      // Intentamos leer la base de datos de empresas
+      const fileContents = await fs.readFile(dbPath, 'utf8');
+      dbData = JSON.parse(fileContents);
+    } catch (error) {
+      // Si el archivo no existe, significa que no hay usuarios, por lo tanto, las credenciales son inválidas.
+      return res.status(401).json({ message: 'Credenciales inválidas.' });
     }
-  };
-  
-  // El resto del código del formulario es el mismo...
-  return (
-    // ... (todo el JSX del formulario se mantiene igual que antes)
-    <>
-      <Head>
-        <title>Iniciar Sesión - CritoBots</title>
-      </Head>
-      <div className="min-h-screen bg-gray-800 flex items-center justify-center p-4">
-        <div className="bg-gray-900 p-8 rounded-lg shadow-xl w-full max-w-md">
-          <h2 className="text-2xl font-bold mb-6 text-center text-white">Iniciar Sesión</h2>
-          <form onSubmit={handleSubmit}>
-            <div className="mb-4">
-              <label className="block text-gray-400 mb-2" htmlFor="email">Email</label>
-              <input className="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-teal-500" type="email" id="email" name="email" required />
-            </div>
-            <div className="mb-6">
-              <label className="block text-gray-400 mb-2" htmlFor="contrasena">Contraseña</label>
-              <input className="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-teal-500" type="password" id="contrasena" name="contrasena" required />
-            </div>
-            <button type="submit" className="w-full bg-teal-500 text-white py-3 rounded-lg font-semibold hover:bg-teal-600 transition-colors">
-              Entrar
-            </button>
-            {status && <p className="text-center text-gray-300 mt-4">{status}</p>}
-          </form>
-          <div className="text-center mt-6">
-             <Link href="/register" className="text-teal-400 hover:underline">
-                ¿No tienes una cuenta? Regístrate
-             </Link>
-          </div>
-        </div>
-      </div>
-    </>
-  );
+
+    // Buscamos en la base de datos si existe un usuario con ese email
+    const user = dbData.find(u => u.email === email);
+
+    // Verificamos si encontramos al usuario Y si la contraseña coincide
+    // En un proyecto real, la contraseña estaría "hasheada" (encriptada) con bcrypt.
+    if (!user || user.contrasena !== contrasena) {
+      return res.status(401).json({ message: 'Email o contraseña incorrectos.' });
+    }
+
+    // ¡ÉXITO! Si las credenciales son correctas, creamos la "llave" (token).
+    const token = jwt.sign(
+      { userId: user.id, email: user.email }, // Guardamos información útil dentro del token
+      'MI_CLAVE_SECRETA_SUPER_SECRETA', // Esta es la clave para firmar el token. Debe ser secreta.
+      { expiresIn: '8h' } // El token será válido por 8 horas
+    );
+
+    // Enviamos una respuesta exitosa junto con el token.
+    return res.status(200).json({ message: 'Inicio de sesión exitoso.', token: token });
+
+  } catch (error) {
+    // Si ocurre cualquier otro error, lo registramos y enviamos una respuesta genérica.
+    console.error('ERROR EN API DE LOGIN:', error);
+    return res.status(500).json({ message: 'Error interno del servidor.' });
+  }
 }
